@@ -12,16 +12,28 @@ Reference conditions used throughout (Rahman 1964, liquid argon):
 
 ## M0 — Skeleton and infrastructure
 
-- [ ] Cargo workspace laid out; core types defined
-- [ ] Particle storage is struct-of-arrays from the start
-- [ ] Unit system chosen, documented in `CLAUDE.md`, and encoded as named
-      constants (not magic numbers)
-- [ ] CI running `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check`
-- [ ] `criterion` benchmark harness in place with one trivial benchmark
-- [ ] `LOG.md`, `docs/theory/`, `docs/decisions/` created
+- [x] Cargo workspace laid out; core types defined
+      — single crate, `lib.rs` + thin `main.rs` driver (ADR 0002)
+- [x] Particle storage is struct-of-arrays from the start
+      — hand-rolled parallel `Vec<f64>`, `soa-rs` dropped (ADR 0001)
+- [x] Unit system chosen, documented in `CLAUDE.md`, and encoded as named
+      constants (not magic numbers) — `src/units.rs`, each constant derived
+      from SI by a test rather than restated
+- [x] CI running `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check`
+      — plus `cargo bench --no-run`; `main` protected on the `check` status
+- [x] `criterion` benchmark harness in place with one trivial benchmark
+      — `benches/minimum_image.rs`
+- [x] `LOG.md`, `docs/theory/`, `docs/decisions/` created
 
 **Acceptance:** CI green on a trivial commit. Benchmark harness produces a
 number. No physics yet.
+
+*Measured:* CI green on the initial commit (run 30876592198). 26 tests pass;
+clippy `-D warnings` and `fmt --check` clean. Benchmark: minimum image at
+**1.135 ns/pair** over 10⁴ displacements (aarch64, `lto = "fat"`,
+`codegen-units = 1`) — against 4.354 ns/pair for the branch form, i.e. the
+correct version is 3.8× faster, not slower. `FORCE_TO_ACCEL` reproduces from
+SI to `< 1e-12` relative; `BOLTZMANN` to `8e-8`.
 
 ---
 
