@@ -1,0 +1,6 @@
+# Pins the toolchain so local builds and CI are identical. GitHub runners ship
+# rustup, which reads this file automatically -- CI therefore needs no
+# toolchain-installing action, and cannot drift from a developer machine.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]

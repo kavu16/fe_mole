@@ -1,0 +1,7 @@
+/target
+.DS_Store
+flycheck*
+perf.data*
+
+# Note: validation/ plots and the scripts that produce them ARE committed --
+# they are the acceptance evidence for each milestone.

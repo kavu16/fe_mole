@@ -1,0 +1,40 @@
+[package]
+name = "fe_mole"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.86"
+description = "A molecular dynamics engine written from scratch in Rust"
+
+[lib]
+name = "fe_mole"
+path = "src/lib.rs"
+
+[[bin]]
+name = "fe_mole"
+path = "src/main.rs"
+
+[dependencies]
+# Intentionally empty at M0. Crates are added at the milestone that needs them:
+#   M3 thermostats -> rand, rand_pcg
+#   M4 PME         -> rustfft
+#   M5 performance -> rayon
+
+[dev-dependencies]
+approx = "0.5"
+criterion = { version = "0.8", features = ["html_reports"] }
+rand = "0.9"
+rand_pcg = "0.9"
+
+[[bench]]
+name = "minimum_image"
+harness = false
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+# Keep symbols in release builds so `samply`/`perf` can attribute time to source
+# lines during the M5 profiling work. Costs binary size, not speed.
+debug = 1
+
+[lints.rust]
+missing_docs = "warn"

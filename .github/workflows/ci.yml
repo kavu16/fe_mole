@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push to the same branch makes an in-flight run irrelevant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # No toolchain-installing action on purpose: rust-toolchain.toml drives
+      # rustup on the runner, so CI cannot drift from a local checkout.
+      - name: Show toolchain
+        run: |
+          rustup show
+          cargo --version
+          rustc --version
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Test
+        run: cargo test --all-features
+
+      # Compile the benchmarks without running them. Benchmarks rot silently
+      # because nothing builds them on a normal `cargo test`; a few seconds
+      # here catches that.
+      - name: Build benchmarks
+        run: cargo bench --no-run
