@@ -10,11 +10,13 @@ acceptance criteria that define "done" for each stage.
 
 ## What this is
 
-A portfolio project, built to the standard that scientific software actually
-requires: a physics change is not finished until a numerical check confirms it,
-and no performance claim lands without a before/after measurement. Every
-milestone has acceptance criteria stated as numbers rather than judgment calls,
-and the measured values are recorded next to them.
+A learning project — the goal is to understand molecular dynamics by building
+it rather than by reading about it. That only works if the result is actually
+checkable, so it is held to the standard scientific software requires: a
+physics change is not finished until a numerical check confirms it, and no
+performance claim lands without a before/after measurement. Every milestone has
+acceptance criteria stated as numbers rather than judgment calls, and the
+measured values are recorded next to them.
 
 ## Build and test
 

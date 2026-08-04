@@ -56,10 +56,11 @@ arrays behind private fields and slice accessors.
 - **Fields have different lifetimes.** `mass`, `charge` and `kind` are static
   after setup; `f` is zeroed and rebuilt every step; `r` is read by everything.
   A single derived struct binds them all to one access pattern.
-- **It is the artifact.** This is a portfolio project, and "struct-of-arrays,
-  deliberately, for SIMD and cache" is the first thing a reviewer will probe.
-  The hand-rolled version is about sixty lines of obvious code, and this record
-  is the answer to the question. A derive macro is not.
+- **The layout is the thing being learned.** Memory layout is one of the two or
+  three decisions that actually determine how an MD engine performs, and
+  delegating it to a derive macro skips the part worth understanding. The
+  hand-rolled version is about sixty lines of obvious code, and writing it
+  forces the questions this record answers.
 
 ## Consequences
 

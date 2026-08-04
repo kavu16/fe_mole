@@ -2,15 +2,16 @@
 
 ## What this project is
 
-A molecular dynamics engine written from scratch in Rust. It is a portfolio
-project targeting scientific software engineering roles (D. E. Shaw Research,
-Schrödinger). That shapes every tradeoff:
+A molecular dynamics engine written from scratch in Rust. It is a learning
+project: the goal is to understand the physics and numerics by implementing
+them, not to compete with LAMMPS or GROMACS. That shapes every tradeoff:
 
 - **Correctness beats speed, and validated correctness beats claimed correctness.**
-  A physics change is not done until a numerical check confirms it.
-- **Clarity beats cleverness.** This code will be read by hiring managers.
-  Prefer an obvious implementation with a comment citing the paper over a
-  terse one.
+  A physics change is not done until a numerical check confirms it. An engine
+  you cannot verify teaches you nothing.
+- **Clarity beats cleverness.** This code is meant to be re-read and understood
+  months later. Prefer an obvious implementation with a comment citing the
+  paper over a terse one.
 - **Optimize only with measurements.** No performance change lands without a
   before/after benchmark number.
 
