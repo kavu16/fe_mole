@@ -117,3 +117,32 @@ catches the realistic failure, which is me pushing without running clippy.
 criteria are numbers from test runs, not from CI configuration.
 
 ---
+
+## 2026-08-04 — Back to public; protection restored
+
+**Context:** M0 infrastructure. Reversed the previous entry's decision after
+reframing the project description.
+
+**What I did:** Removed the language describing this as a portfolio project
+aimed at particular employers, restating it as a learning project. Made the
+repo public again and reapplied branch protection on `main`.
+
+**Result:** Protection is enforced again: required status check `check`,
+`strict` (branch must be current before merge), no required reviews,
+`enforce_admins` false, no force-push, no branch deletion. The 403 from the
+previous entry is gone.
+
+**Interpretation:** The two settings that could have locked me out of my own
+repo are both deliberately off. Required *reviews* would be unworkable solo —
+GitHub does not let you approve your own pull request. `enforce_admins` stays
+false so a direct push to `main` is still possible when warranted; the
+protection documents the standard rather than making the repo unusable.
+
+The reframing was worth doing on its own terms. The engineering rules it was
+originally used to justify — validate before claiming, measure before
+optimising — do not depend on who is reading. Motivating them by an audience
+was the weaker argument; an engine you cannot verify teaches you nothing.
+
+**Next:** M1. No infrastructure work outstanding.
+
+---
