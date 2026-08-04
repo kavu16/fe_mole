@@ -86,3 +86,34 @@ NVE energy-conservation harness, since it is the acceptance criterion for
 everything after it.
 
 ---
+
+## 2026-08-04 — Repo made private; branch protection lost
+
+**Context:** M0 infrastructure. Decided to keep the work private until it is
+ready to share.
+
+**What I did:** Switched `kavu16/fe_mole` from public to private.
+
+**Result:** CI still runs on every push and is green (private repos get 2000
+free Actions minutes/month; a run takes ~1 min, so the quota is not a
+constraint at this rate). Branch protection was silently dropped: on the free
+plan, both branch protection rules and rulesets require a paid plan for
+private repositories. `GET /repos/kavu16/fe_mole/branches/main/protection`
+now returns 403.
+
+**Interpretation:** The CI *signal* survived; only the *enforcement* was lost.
+A red run no longer blocks anything — it just reports. That is a meaningful
+weakening for a project whose whole premise is that validation gates progress,
+so it should not be left implicit: `MILESTONES.md` claimed `main` was
+protected and has been corrected.
+
+The practical substitute while private is a local `pre-push` hook running the
+same three checks. That is weaker than server-side enforcement — it is
+bypassable with `--no-verify` and does not survive a fresh clone — but it
+catches the realistic failure, which is me pushing without running clippy.
+
+**Next:** Re-enable protection on the `check` status when the repo goes public
+(the command is in this entry's commit). Unaffected for M1: the acceptance
+criteria are numbers from test runs, not from CI configuration.
+
+---

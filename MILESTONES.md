@@ -20,7 +20,10 @@ Reference conditions used throughout (Rahman 1964, liquid argon):
       constants (not magic numbers) — `src/units.rs`, each constant derived
       from SI by a test rather than restated
 - [x] CI running `cargo test`, `cargo clippy -- -D warnings`, `cargo fmt --check`
-      — plus `cargo bench --no-run`; `main` protected on the `check` status
+      — plus `cargo bench --no-run`. Branch protection is **not** enabled:
+      the repo is private, and GitHub gates protection rules and rulesets on
+      a paid plan for private repos. CI still runs on every push. Re-enable
+      protection on the `check` status when the repo goes public.
 - [x] `criterion` benchmark harness in place with one trivial benchmark
       — `benches/minimum_image.rs`
 - [x] `LOG.md`, `docs/theory/`, `docs/decisions/` created
