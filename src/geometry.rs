@@ -1,5 +1,7 @@
 //! Geometry: the [`Vec3`] scalar value type and the periodic [`SimBox`].
 
+use std::ops::{Add, Mul, Neg, Sub};
+
 use crate::units::AVOGADRO;
 
 /// A three-component vector in internal units (Å, or Å/fs, or kcal/mol/Å —
@@ -48,6 +50,46 @@ impl Vec3 {
     #[must_use]
     pub fn norm(self) -> f64 {
         self.norm_squared().sqrt()
+    }
+}
+
+impl Sub for Vec3 {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Vec3::new(self.x - rhs.x, self.y - rhs.y, self.z - rhs.z)
+    }
+}
+
+impl Add for Vec3 {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Vec3::new(self.x + rhs.x, self.y + rhs.y, self.z + rhs.z)
+    }
+}
+
+impl Mul<f64> for Vec3 {
+    type Output = Self;
+
+    fn mul(self, rhs: f64) -> Self::Output {
+        Vec3::new(self.x * rhs, self.y * rhs, self.z * rhs)
+    }
+}
+
+impl Mul<Vec3> for f64 {
+    type Output = Vec3;
+
+    fn mul(self, rhs: Vec3) -> Self::Output {
+        rhs * self
+    }
+}
+
+impl Neg for Vec3 {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        Vec3::new(-self.x, -self.y, -self.z)
     }
 }
 
