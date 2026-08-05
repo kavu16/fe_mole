@@ -15,5 +15,7 @@
 //! SIMD and cache behaviour — see `docs/decisions/0001-particle-storage-layout.md`.
 
 pub mod geometry;
+pub mod init;
+pub mod observables;
 pub mod system;
 pub mod units;

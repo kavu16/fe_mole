@@ -204,6 +204,23 @@ impl System {
         )
     }
 
+    /// Borrows masses immutably and velocities mutably at once.
+    ///
+    /// Needed wherever a velocity is scaled by something involving the
+    /// particle's own mass: Maxwell–Boltzmann initialisation, removing
+    /// centre-of-mass drift, and the integrator's kick step. Same borrow
+    /// reason as [`System::split_for_forces`].
+    pub fn split_masses_velocities(&mut self) -> (&[f64], SlicesMut3<'_>) {
+        (
+            &self.mass,
+            SlicesMut3 {
+                x: &mut self.vx,
+                y: &mut self.vy,
+                z: &mut self.vz,
+            },
+        )
+    }
+
     /// Checks the equal-length invariant. Debug-only: it runs on every `push`,
     /// and private fields already guarantee it structurally.
     fn debug_assert_consistent(&self) {

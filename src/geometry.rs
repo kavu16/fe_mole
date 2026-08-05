@@ -225,7 +225,7 @@ impl SimBox {
 mod tests {
     use super::*;
     use approx::assert_relative_eq;
-    use rand::{Rng, SeedableRng};
+    use rand::{RngExt, SeedableRng};
     use rand_pcg::Pcg64Mcg;
 
     fn seeded_rng() -> Pcg64Mcg {
@@ -429,7 +429,7 @@ mod tests {
 mod vec3_ops {
     use crate::geometry::{SimBox, Vec3};
     use approx::assert_relative_eq;
-    use rand::{Rng, SeedableRng};
+    use rand::{RngExt, SeedableRng};
     use rand_pcg::Pcg64Mcg;
 
     /// Componentwise comparison, for properties that do not hold exactly in

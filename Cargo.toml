@@ -14,16 +14,17 @@ name = "fe_mole"
 path = "src/main.rs"
 
 [dependencies]
-# Intentionally empty at M0. Crates are added at the milestone that needs them:
-#   M3 thermostats -> rand, rand_pcg
-#   M4 PME         -> rustfft
-#   M5 performance -> rayon
+# Seedable, reproducible RNG streams. Required from M1 (Maxwell-Boltzmann
+# velocity initialisation) and central to M3's stochastic integrators, which
+# are untestable without reproducibility.
+rand = "0.10.2"
+rand_distr = "0.6.0"
+rand_pcg = "0.10.2"
+# Still to come: rustfft at M4 (PME), rayon at M5.
 
 [dev-dependencies]
 approx = "0.5"
 criterion = { version = "0.8", features = ["html_reports"] }
-rand = "0.9"
-rand_pcg = "0.9"
 
 [[bench]]
 name = "minimum_image"

@@ -37,6 +37,20 @@ pub const BOLTZMANN: f64 = 0.0019872041;
 /// is defined as exactly 4184 J.
 pub const FORCE_TO_ACCEL: f64 = 4.184e-4;
 
+/// Converts `m · v²` from internal units (amu·Å²/fs²) to energy in kcal/mol:
+/// `E = MASS_VELOCITY_SQ_TO_ENERGY · m · v²`.
+///
+/// Needed by every kinetic-energy and temperature calculation. Exactly
+/// `1 / FORCE_TO_ACCEL`, and necessarily so: the factor that turns a force
+/// into an acceleration has to turn the resulting work back into an energy,
+/// or kinetic and potential energy land on different scales and their sum is
+/// meaningless.
+///
+/// Omitting it inflates kinetic energy by a factor of ~2390, which surfaces as
+/// an absurd temperature rather than a slow drift — one of the few unit errors
+/// in MD that fails loudly.
+pub const MASS_VELOCITY_SQ_TO_ENERGY: f64 = 1.0 / FORCE_TO_ACCEL;
+
 /// Acceleration [Å/fs²] of a particle of mass `mass` [amu] under a force
 /// component `force` [kcal/mol/Å].
 ///
@@ -80,6 +94,34 @@ mod tests {
         // This is an analytical identity, not a measurement: the only error
         // permitted is floating-point round-off in the derivation above.
         assert_relative_eq!(FORCE_TO_ACCEL, derived, max_relative = 1e-12);
+    }
+
+    #[test]
+    fn mass_velocity_sq_to_energy_matches_si() {
+        // One amu moving at 1 Å/fs, taken to J and then to kcal/mol.
+        let v_si = FS_PER_SECOND / ANGSTROM_PER_METRE; // 1 Å/fs in m/s
+        let energy_si = KG_PER_AMU * v_si * v_si;
+        let derived = energy_si * AVOGADRO / JOULES_PER_KCAL;
+        assert_relative_eq!(MASS_VELOCITY_SQ_TO_ENERGY, derived, max_relative = 1e-12);
+    }
+
+    #[test]
+    fn energy_and_acceleration_conversions_are_reciprocal() {
+        // Not a coincidence: work done by a force must come back out as an
+        // energy on the same scale the force was defined on.
+        assert_relative_eq!(
+            MASS_VELOCITY_SQ_TO_ENERGY * FORCE_TO_ACCEL,
+            1.0,
+            max_relative = 1e-15
+        );
+    }
+
+    #[test]
+    fn thermal_speed_of_argon() {
+        // Magnitude check against a hand calculation: v_rms = sqrt(3kT/m) for
+        // argon at the reference temperature is 242.8 m/s, i.e. 2.428e-3 Å/fs.
+        let v_rms_sq = 3.0 * BOLTZMANN * 94.4 / MASS_VELOCITY_SQ_TO_ENERGY / 39.948;
+        assert_relative_eq!(v_rms_sq.sqrt(), 2.428e-3, max_relative = 1e-3);
     }
 
     #[test]
