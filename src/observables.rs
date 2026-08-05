@@ -1,7 +1,10 @@
 //! Instantaneous observables computed from particle state.
 
+use itertools::izip;
+
 use crate::geometry::Vec3;
 use crate::system::System;
+use crate::units::{BOLTZMANN, MASS_VELOCITY_SQ_TO_ENERGY};
 
 /// Total kinetic energy, kcal/mol.
 ///
@@ -9,10 +12,16 @@ use crate::system::System;
 /// see [`crate::units::MASS_VELOCITY_SQ_TO_ENERGY`]. Getting this wrong puts
 /// kinetic and potential energy on different scales, and their sum, which M1
 /// is judged on, becomes meaningless.
-#[expect(unused_variables, reason = "stub: body is checkpoint 1 work")]
 #[must_use]
 pub fn kinetic_energy(system: &System) -> f64 {
-    todo!("M1 checkpoint 1")
+    let masses = system.masses();
+    let velocities = system.velocities();
+
+    izip!(masses, velocities.x, velocities.y, velocities.z)
+        .map(|(m, vx, vy, vz)| m * (vx * vx + vy * vy + vz * vz))
+        .sum::<f64>()
+        * 0.5
+        * MASS_VELOCITY_SQ_TO_ENERGY
 }
 
 /// Instantaneous temperature, K.
@@ -29,10 +38,11 @@ pub fn kinetic_energy(system: &System) -> f64 {
 ///
 /// Panics if the system has fewer than two particles, where `3N − 3` is not a
 /// meaningful count of degrees of freedom.
-#[expect(unused_variables, reason = "stub: body is checkpoint 1 work")]
 #[must_use]
 pub fn temperature(system: &System) -> f64 {
-    todo!("M1 checkpoint 1")
+    assert!(system.len() >= 3, "degrees of freedom");
+    let n_dof = 3 * system.len() - 3;
+    2.0 * kinetic_energy(system) / (n_dof as f64 * BOLTZMANN)
 }
 
 /// Total momentum `Σᵢ mᵢ vᵢ`, amu·Å/fs.
@@ -41,10 +51,15 @@ pub fn temperature(system: &System) -> f64 {
 /// force loop: M1 requires `|p| < 1e-10` after 10⁵ steps. A drift here after
 /// the integrator lands means the pair loop is not applying equal and opposite
 /// forces.
-#[expect(unused_variables, reason = "stub: body is checkpoint 1 work")]
 #[must_use]
 pub fn total_momentum(system: &System) -> Vec3 {
-    todo!("M1 checkpoint 1")
+    let masses = system.masses();
+    let velocities = system.velocities();
+
+    izip!(masses, velocities.x, velocities.y, velocities.z)
+        .fold(Vec3::ZERO, |acc, (m, vx, vy, vz)| {
+            acc + Vec3::new(m * vx, m * vy, m * vz)
+        })
 }
 
 #[cfg(test)]
