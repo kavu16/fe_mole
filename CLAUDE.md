@@ -111,6 +111,52 @@ have since been trimmed:
 `missing_docs` is on, so every public item needs a doc comment. One line is a
 complete answer for an obvious getter.
 
+### Error handling
+
+The engine panics rather than returning `Result`, and that is deliberate. The
+deciding question is **where the value came from**, not what is being checked:
+
+- **Panic** on a contract violation — a bug in the calling code.
+  `SimBox::cubic(-1.0)` is not a runtime condition to handle; no `?` anywhere up
+  the stack makes it recoverable.
+- **`Result`** for anything originating outside the process: config files,
+  coordinate files, command-line arguments.
+
+Every value reaching a constructor today comes from code in this repo, so there
+is nothing a `Result` could mean. Two reasons that stays true for the core:
+
+1. **There is no degraded mode.** A zero mass has no sane recovery — you cannot
+   continue a trajectory with one slightly-wrong particle and report a
+   slightly-wrong diffusion coefficient. A `Result` would push a decision onto
+   a caller whose only option is to abort, and add `?` noise to every call site.
+2. **Silent wrongness is the enemy.** A zero mass gives infinite acceleration,
+   then NaN positions, which propagate for 10⁵ steps and yield a plausible
+   energy trace. Panicking at construction is the loudest, earliest failure
+   available. This is why `SimBox::new` rejects a zero-width box instead of
+   letting `minimum_image` quietly return NaN.
+
+Three tools, three jobs:
+
+- `assert!` — validate at construction and at API boundaries. Cold paths only.
+- `debug_assert!` — invariants checked in hot paths, where the cost would show
+  up in a benchmark (e.g. the struct-of-arrays length invariant, and Newton's
+  third law inside the pair loop later).
+- `Result` — the I/O boundary, when it arrives. Use *parse, don't validate*:
+  the parser returns `Result` and checks the numbers, then hands clean values
+  to constructors that can go on asserting.
+
+Document every panic in a `# Panics` doc section (Rust API guideline C-FAILURE).
+
+This is idiomatic Rust generally, not a scientific-computing exception —
+`ndarray` panics on shape mismatch and `nalgebra` on dimension mismatch, while
+`Result`-heavy crates are the ones eating untrusted input. Numeric kernels lean
+panic; I/O leans `Result`.
+
+**A case where the answer depends on the source:** the minimum image convention
+is only valid for `r_c ≤ L/2`, so that check must exist before the LJ cutoff
+does. It is a panic if the cutoff is a constant in the code, and a `Result` if
+it comes from a config file — same check, different answer.
+
 ## Where the context lives
 
 Read these when relevant — do not assume their contents:

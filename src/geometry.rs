@@ -145,13 +145,19 @@ impl SimBox {
     ///
     /// # Panics
     ///
-    /// Panics if `n` is zero, or if `mass` or `density` is not strictly
-    /// positive.
+    /// Panics if `n` is zero, or if `mass` or `density` is not finite and
+    /// strictly positive.
     #[must_use]
     pub fn from_density(n: usize, mass: f64, density: f64) -> Self {
         assert!(n > 0, "cannot size a box for zero particles");
-        assert!(mass > 0.0, "mass must be positive, got {mass}");
-        assert!(density > 0.0, "density must be positive, got {density}");
+        assert!(
+            mass.is_finite() && mass > 0.0,
+            "mass must be finite and positive, got {mass}"
+        );
+        assert!(
+            density.is_finite() && density > 0.0,
+            "density must be finite and positive, got {density}"
+        );
 
         // Total mass in grams: n particles of `mass` amu is n·mass g/mol.
         let grams = n as f64 * mass / AVOGADRO;
