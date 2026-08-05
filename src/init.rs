@@ -2,10 +2,13 @@
 //!
 //! Nothing here is part of a trajectory — these run once, before step zero.
 
+use itertools::izip;
 use rand::Rng;
+use rand_distr::{Distribution, Normal};
 
 use crate::geometry::{SimBox, Vec3};
-use crate::system::System;
+use crate::system::{SlicesMut3, System};
+use crate::units::{BOLTZMANN, MASS_VELOCITY_SQ_TO_ENERGY};
 
 /// Builds a face-centred cubic lattice of `4 · cells_per_side³` particles
 /// filling `sim_box`, every particle of mass `mass` [amu].
@@ -108,9 +111,29 @@ pub fn fcc_lattice(cells_per_side: usize, sim_box: SimBox, mass: f64) -> System 
 ///
 /// Panics if `temperature` is not finite and positive, or if the system has
 /// fewer than two particles.
-#[expect(unused_variables, reason = "stub: body is checkpoint 1 work")]
 pub fn maxwell_boltzmann_velocities(system: &mut System, temperature: f64, rng: &mut impl Rng) {
-    todo!("M1 checkpoint 1")
+    assert!(
+        temperature.is_finite() && temperature > 0.0,
+        "temperature must be finite and positive, got {temperature}"
+    );
+    // Fewer than two particles leaves 3N − 3 ≤ 3 degrees of freedom, so
+    // "the temperature of this system" is not a meaningful quantity to
+    // initialise to.
+    assert!(
+        system.len() >= 2,
+        "Maxwell-Boltzmann initialisation needs at least two particles, got {}",
+        system.len()
+    );
+
+    let (masses, SlicesMut3 { x, y, z }) = system.split_masses_velocities();
+
+    for (&m, vx, vy, vz) in izip!(masses, x, y, z) {
+        let sigma = (BOLTZMANN * temperature / (MASS_VELOCITY_SQ_TO_ENERGY * m)).sqrt();
+        let normal = Normal::new(0.0, sigma).expect("temperature and mass validated");
+        *vx = normal.sample(rng);
+        *vy = normal.sample(rng);
+        *vz = normal.sample(rng);
+    }
 }
 
 /// Subtracts the mass-weighted mean velocity from every particle, leaving zero
