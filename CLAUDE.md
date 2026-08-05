@@ -15,6 +15,75 @@ them, not to compete with LAMMPS or GROMACS. That shapes every tradeoff:
 - **Optimize only with measurements.** No performance change lands without a
   before/after benchmark number.
 
+## How we work
+
+Because this is a learning project, work is split by **learning value, not by
+difficulty**. Implementing a Lennard-Jones kernel is the point; wiring up a
+criterion benchmark is not. Do not optimise for finishing a milestone quickly.
+
+**Default division of labour.** For each chunk of work, Claude writes:
+
+- the failing acceptance test,
+- function signatures with doc comments stating the physics, the units, and the
+  source (paper or `docs/theory/` note),
+- the skeleton of any new `docs/theory/` note,
+- all scaffolding: CI, criterion boilerplate, plotting scripts, file I/O,
+  manifest edits.
+
+**I write the function bodies** — the physics and the numerics. Claude does not
+write them, even when asked indirectly ("what would that look like?", "can you
+show me roughly?"). Answer with the hint ladder below instead.
+
+**Tests must assert physics, not an implementation.** A test that encodes
+Claude's version of the algorithm teaches nothing and hides bugs the two share.
+Prefer, in rough order of value:
+
+- comparison against an analytical result (Madelung constant, virial theorem),
+- a conservation law (energy, momentum, time-reversibility),
+- a numerical derivative: any force must match `-(V(r+h) − V(r−h)) / 2h`,
+- comparison against a slower, obviously-correct implementation,
+- a symmetry or limiting case (`r → ∞`, `N = 2`, zero temperature).
+
+**Work in checkpoints, not milestones.** Break a milestone into pieces that
+each end at something runnable and checkable, and stop there for review. M1 is
+at least three: minimum-image-based pair loop, LJ potential and force, velocity
+Verlet. Never implement the integrator and the force calculation in one go —
+that is also a debugging rule (see Pitfalls), not just a pedagogical one.
+
+### Hint ladder
+
+When I say I am stuck, I will name a level. Give **that level and stop** — do
+not volunteer a higher one, and do not append the answer "for reference". If I
+do not name a level, default to 1.
+
+1. **Direction** — which function, concept, or invariant is implicated. No
+   equations.
+2. **Reference** — the specific equation, paper section, or `docs/theory/` note
+   to read.
+3. **Pseudocode** — structure and order of operations, in prose or maths. No
+   Rust.
+4. **Code** — the implementation.
+
+The same ladder applies when reviewing my code and finding a *physics or
+numerics* error: report the symptom and where it would show up, at level 1, and
+let me find it. Mechanical errors — typos, borrow-checker complaints, clippy
+lints, formatting — are not a learning opportunity; just say what is wrong and
+fix it.
+
+### Bug-injection drills
+
+At the end of a milestone, when I ask for one, introduce a single realistic bug
+on a scratch branch and report **only the symptom**: a drift number, a shifted
+`g(r)` peak, a heating trend, a failed conservation check. Realistic means the
+kinds listed under Pitfalls — a dropped unit conversion, a cutoff applied to
+the energy but not the force, a sign error, a neighbour list that misses pairs,
+a thermostat that biases the sampled distribution.
+
+Do not reveal the bug, the file, or the diff until I have committed to a
+diagnosis. Then show it and we compare reasoning. Record the drill in `LOG.md`
+if the diagnosis was wrong — a wrong diagnosis is exactly the kind of dead end
+that log is for.
+
 ## Where the context lives
 
 Read these when relevant — do not assume their contents:
