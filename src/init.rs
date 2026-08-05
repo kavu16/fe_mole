@@ -7,6 +7,7 @@ use rand::Rng;
 use rand_distr::{Distribution, Normal};
 
 use crate::geometry::{SimBox, Vec3};
+use crate::observables::{temperature as system_temperature, total_momentum};
 use crate::system::{SlicesMut3, System};
 use crate::units::{BOLTZMANN, MASS_VELOCITY_SQ_TO_ENERGY};
 
@@ -125,14 +126,27 @@ pub fn maxwell_boltzmann_velocities(system: &mut System, temperature: f64, rng: 
         system.len()
     );
 
-    let (masses, SlicesMut3 { x, y, z }) = system.split_masses_velocities();
+    // Scoped so the mutable borrow ends before the calls below, each of which
+    // needs its own borrow of `system`.
+    {
+        let (masses, SlicesMut3 { x, y, z }) = system.split_masses_velocities();
+        for (&m, vx, vy, vz) in izip!(masses, x, y, z) {
+            let sigma = (BOLTZMANN * temperature / (MASS_VELOCITY_SQ_TO_ENERGY * m)).sqrt();
+            let normal = Normal::new(0.0, sigma).expect("temperature and mass validated");
+            *vx = normal.sample(rng);
+            *vy = normal.sample(rng);
+            *vz = normal.sample(rng);
+        }
+    }
 
-    for (&m, vx, vy, vz) in izip!(masses, x, y, z) {
-        let sigma = (BOLTZMANN * temperature / (MASS_VELOCITY_SQ_TO_ENERGY * m)).sqrt();
-        let normal = Normal::new(0.0, sigma).expect("temperature and mass validated");
-        *vx = normal.sample(rng);
-        *vy = normal.sample(rng);
-        *vz = normal.sample(rng);
+    remove_center_of_mass_momentum(system);
+
+    let rescale = (temperature / system_temperature(system)).sqrt();
+    let (_, SlicesMut3 { x, y, z }) = system.split_masses_velocities();
+    for (vx, vy, vz) in izip!(x, y, z) {
+        *vx *= rescale;
+        *vy *= rescale;
+        *vz *= rescale;
     }
 }
 
@@ -149,9 +163,19 @@ pub fn maxwell_boltzmann_velocities(system: &mut System, temperature: f64, rng: 
 /// # Panics
 ///
 /// Panics if the system is empty.
-#[expect(unused_variables, reason = "stub: body is checkpoint 1 work")]
 pub fn remove_center_of_mass_momentum(system: &mut System) {
-    todo!("M1 checkpoint 1")
+    assert!(!system.is_empty(), "system must not be empty");
+
+    // Both totals have to be read before the mutable borrow below.
+    let total_mass: f64 = system.masses().iter().sum();
+    let v_com = total_momentum(system) * total_mass.recip();
+
+    let (_, SlicesMut3 { x, y, z }) = system.split_masses_velocities();
+    for (vx, vy, vz) in izip!(x, y, z) {
+        *vx -= v_com.x;
+        *vy -= v_com.y;
+        *vz -= v_com.z;
+    }
 }
 
 #[cfg(test)]
