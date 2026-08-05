@@ -14,6 +14,7 @@ name = "fe_mole"
 path = "src/main.rs"
 
 [dependencies]
+itertools = "0.15.0"
 # Seedable, reproducible RNG streams. Required from M1 (Maxwell-Boltzmann
 # velocity initialisation) and central to M3's stochastic integrators, which
 # are untestable without reproducibility.

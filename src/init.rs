@@ -4,7 +4,7 @@
 
 use rand::Rng;
 
-use crate::geometry::SimBox;
+use crate::geometry::{SimBox, Vec3};
 use crate::system::System;
 
 /// Builds a face-centred cubic lattice of `4 · cells_per_side³` particles
@@ -30,10 +30,62 @@ use crate::system::System;
 /// # Panics
 ///
 /// Panics if `cells_per_side` is zero, or `mass` is not finite and positive.
-#[expect(unused_variables, reason = "stub: body is checkpoint 1 work")]
 #[must_use]
 pub fn fcc_lattice(cells_per_side: usize, sim_box: SimBox, mass: f64) -> System {
-    todo!("M1 checkpoint 1")
+    assert_ne!(cells_per_side, 0, "cells_per_side is zero");
+    assert!(mass.is_finite(), "Mass is not finite");
+    assert!(mass > 0.0, "Mass is not positive");
+
+    let mut system = System::with_capacity(
+        4 * cells_per_side * cells_per_side * cells_per_side,
+        sim_box,
+    );
+
+    let l = sim_box.lengths();
+    let x_cell = l.x / cells_per_side as f64;
+    let y_cell = l.y / cells_per_side as f64;
+    let z_cell = l.z / cells_per_side as f64;
+
+    for (x, y, z) in itertools::iproduct!(0..cells_per_side, 0..cells_per_side, 0..cells_per_side) {
+        let x_half = x as f64 * x_cell + x_cell / 2.0;
+        let y_half = y as f64 * y_cell + y_cell / 2.0;
+        let z_half = z as f64 * z_cell + z_cell / 2.0;
+
+        // Cell origin
+        system.push(
+            Vec3::new(x as f64 * x_cell, y as f64 * y_cell, z as f64 * z_cell),
+            Vec3::ZERO,
+            mass,
+            0.0,
+            0,
+        );
+        // Cell yz face center
+        system.push(
+            Vec3::new(x as f64 * x_cell, y_half, z_half),
+            Vec3::ZERO,
+            mass,
+            0.0,
+            0,
+        );
+        // Cell xz face center
+        system.push(
+            Vec3::new(x_half, y as f64 * y_cell, z_half),
+            Vec3::ZERO,
+            mass,
+            0.0,
+            0,
+        );
+        // Cell xy face center
+        system.push(
+            Vec3::new(x_half, y_half, z as f64 * z_cell),
+            Vec3::ZERO,
+            mass,
+            0.0,
+            0,
+        );
+    }
+
+    system
 }
 
 /// Draws velocities from the Maxwell–Boltzmann distribution at `temperature`
@@ -146,6 +198,26 @@ mod tests {
             }
         }
         min
+    }
+
+    #[test]
+    fn neighbour_counts_sees_across_the_periodic_boundary() {
+        // Validates the test helper itself, independently of any lattice: two
+        // particles just inside opposite faces are 0.2 Å apart through the
+        // boundary and 9.8 Å apart the other way. If `neighbour_counts` did
+        // not apply minimum image they would look like distant strangers.
+        let mut s = System::with_capacity(2, SimBox::cubic(10.0));
+        s.push(Vec3::new(5.0, 5.0, 0.1), Vec3::ZERO, 1.0, 0.0, 0);
+        s.push(Vec3::new(5.0, 5.0, 9.9), Vec3::ZERO, 1.0, 0.0, 0);
+
+        assert_eq!(neighbour_counts(&s, 0.5), vec![1, 1]);
+        assert_relative_eq!(min_pair_distance(&s), 0.2, max_relative = 1e-12);
+
+        // ...and a genuinely distant pair is still counted as distant.
+        let mut far = System::with_capacity(2, SimBox::cubic(10.0));
+        far.push(Vec3::new(5.0, 5.0, 0.1), Vec3::ZERO, 1.0, 0.0, 0);
+        far.push(Vec3::new(5.0, 5.0, 5.1), Vec3::ZERO, 1.0, 0.0, 0);
+        assert_eq!(neighbour_counts(&far, 0.5), vec![0, 0]);
     }
 
     #[test]
