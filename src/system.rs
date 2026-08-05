@@ -33,27 +33,18 @@ pub struct SlicesMut3<'a> {
 /// The particle system: positions, velocities, forces and per-particle
 /// properties, plus the periodic box they live in.
 ///
-/// # Layout
-///
 /// Storage is struct-of-arrays — one `Vec<f64>` per component per quantity,
-/// **not** a `Vec<Particle>`. Every field is a contiguous run of `f64` that a
-/// force loop can stream over, and at M5 an individual array can be swapped
-/// for an over-aligned allocation without touching a single call site, because
-/// all access is through `&[f64]` accessors. See
-/// `docs/decisions/0001-particle-storage-layout.md`.
+/// not a `Vec<Particle>`. Access goes through `&[f64]` accessors, so an
+/// individual array can be swapped for an over-aligned allocation at M5
+/// without touching call sites. See ADR 0001.
 ///
-/// # Invariants
+/// All twelve arrays share a length, [`System::len`]; fields are private so
+/// that invariant cannot be broken from outside.
 ///
-/// All twelve arrays always have the same length, [`System::len`]. Fields are
-/// private so that this cannot be broken from outside the module.
-///
-/// # Positions are never wrapped
-///
-/// `rx`/`ry`/`rz` are *unwrapped* — a particle that has crossed the box
-/// fifty times has a coordinate fifty box widths out. This is required:
-/// wrapping in place destroys mean-squared displacement, and with it the
-/// diffusion coefficient measured at M2. Use [`SimBox::wrap`] at output time
-/// only.
+/// **Positions are unwrapped.** A particle that has crossed the box fifty
+/// times has a coordinate fifty box widths out. Wrapping in place would
+/// destroy mean-squared displacement and the diffusion coefficient measured at
+/// M2 — use [`SimBox::wrap`] at output only.
 #[derive(Debug, Clone)]
 pub struct System {
     // Positions, Å. Unwrapped -- see the type-level note above.
@@ -128,29 +119,21 @@ impl System {
     }
 
     /// The number of particles.
-    #[inline]
-    #[must_use]
     pub fn len(&self) -> usize {
         self.rx.len()
     }
 
     /// Whether the system holds no particles.
-    #[inline]
-    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.rx.is_empty()
     }
 
     /// The periodic box.
-    #[inline]
-    #[must_use]
     pub fn sim_box(&self) -> &SimBox {
         &self.sim_box
     }
 
     /// Unwrapped positions, Å.
-    #[inline]
-    #[must_use]
     pub fn positions(&self) -> Slices3<'_> {
         Slices3 {
             x: &self.rx,
@@ -160,8 +143,6 @@ impl System {
     }
 
     /// Velocities, Å/fs.
-    #[inline]
-    #[must_use]
     pub fn velocities(&self) -> Slices3<'_> {
         Slices3 {
             x: &self.vx,
@@ -171,8 +152,6 @@ impl System {
     }
 
     /// Forces, kcal/mol/Å.
-    #[inline]
-    #[must_use]
     pub fn forces(&self) -> Slices3<'_> {
         Slices3 {
             x: &self.fx,
@@ -182,22 +161,16 @@ impl System {
     }
 
     /// Particle masses, amu.
-    #[inline]
-    #[must_use]
     pub fn masses(&self) -> &[f64] {
         &self.mass
     }
 
     /// Particle charges, elementary charges.
-    #[inline]
-    #[must_use]
     pub fn charges(&self) -> &[f64] {
         &self.charge
     }
 
     /// Per-particle species indices.
-    #[inline]
-    #[must_use]
     pub fn kinds(&self) -> &[u16] {
         &self.kind
     }
@@ -210,14 +183,12 @@ impl System {
         self.fz.fill(0.0);
     }
 
-    /// Borrows positions immutably and forces mutably at the same time, so a
-    /// force kernel can read one while accumulating into the other.
+    /// Borrows positions immutably and forces mutably at once, so a force
+    /// kernel can read one while accumulating into the other.
     ///
-    /// This method exists because calling [`System::positions`] and a
-    /// hypothetical `forces_mut` separately would take two conflicting borrows
-    /// of `self`. Splitting inside a single method lets Rust's field-level
-    /// borrow splitting see that the six arrays are disjoint. Further split
-    /// accessors get added as later milestones need them.
+    /// Two separate calls would conflict; splitting inside one method lets
+    /// field-level borrow splitting see the six arrays are disjoint. Later
+    /// milestones add further split accessors as they need them.
     pub fn split_for_forces(&mut self) -> (Slices3<'_>, SlicesMut3<'_>) {
         (
             Slices3 {
@@ -233,11 +204,8 @@ impl System {
         )
     }
 
-    /// Checks the equal-length invariant across all arrays.
-    ///
-    /// Debug-only: this runs on every `push`, and the cost is not worth
-    /// carrying into a production run where the invariant is structurally
-    /// guaranteed by the private fields.
+    /// Checks the equal-length invariant. Debug-only: it runs on every `push`,
+    /// and private fields already guarantee it structurally.
     fn debug_assert_consistent(&self) {
         debug_assert!(
             [

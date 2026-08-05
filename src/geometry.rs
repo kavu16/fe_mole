@@ -119,14 +119,11 @@ impl SimBox {
     }
 
     /// The box side lengths, Å.
-    #[inline]
-    #[must_use]
     pub fn lengths(&self) -> Vec3 {
         self.lengths
     }
 
     /// Box volume, Å³.
-    #[inline]
     #[must_use]
     pub fn volume(&self) -> f64 {
         self.lengths.x * self.lengths.y * self.lengths.z
@@ -166,7 +163,6 @@ impl SimBox {
     /// **Output only.** Never call this during integration: wrapping positions
     /// in place destroys mean-squared displacement and therefore the diffusion
     /// coefficient measured at M2.
-    #[inline]
     #[must_use]
     pub fn wrap(&self, r: Vec3) -> Vec3 {
         Vec3 {

@@ -1,20 +1,14 @@
 //! Benchmark for [`SimBox::minimum_image`].
 //!
-//! M0 asks for one trivial benchmark, purely to prove the harness produces a
-//! number. This one was chosen because it will stay useful: the minimum image
-//! convention is applied to every pair displacement in every force
-//! evaluation, so this is the innermost operation of M1's O(N²) loop, M2's
-//! neighbour lists and M4's real-space Ewald sum. Whatever the per-pair cost
-//! turns out to be, it is a floor on all of them.
+//! Minimum image is applied to every pair displacement in every force
+//! evaluation — the innermost operation of M1's O(N²) loop, M2's neighbour
+//! lists and M4's real-space Ewald sum. Its per-pair cost is a floor on all of
+//! them.
 //!
-//! Two variants are timed so the numbers are comparable later:
-//!
-//! * `round` — the form the engine actually uses. Correct for a displacement
-//!   of any magnitude.
-//! * `branch` — the cheaper conditional form, valid only for `|d| < 3L/2`.
-//!   Benchmarked, **not** exported, and not used anywhere in the engine. It is
-//!   here to quantify what the correct version costs, so that any future
-//!   argument to switch has a number attached to it.
+//! Two variants are timed: `round`, the form the engine uses, correct for any
+//! magnitude; and `branch`, the conditional form valid only for `|d| < 3L/2`,
+//! which is benchmarked but not exported or used anywhere. Timing both means
+//! any future argument to switch arrives with a number attached.
 
 use std::hint::black_box;
 

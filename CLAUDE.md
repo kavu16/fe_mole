@@ -84,6 +84,33 @@ diagnosis. Then show it and we compare reasoning. Record the drill in `LOG.md`
 if the diagnosis was wrong — a wrong diagnosis is exactly the kind of dead end
 that log is for.
 
+### Style
+
+Write idiomatic Rust. Where a Rust idiom and a Fortran/C++ MD idiom conflict,
+prefer the Rust one unless it costs measurable performance.
+
+**Comments: err on the side of fewer.** A comment earns its place by saying
+something the code cannot — a citation, a unit, a non-obvious invariant, a
+measured number, a rejected alternative. Delete anything that restates the
+line below it. Long explanations belong in `docs/theory/` or an ADR, with the
+code pointing at them.
+
+**Attributes are not decoration.** Both of these were over-applied in M0 and
+have since been trimmed:
+
+- `#[inline]` — only on a function small enough that the call overhead rivals
+  the body *and* on a path measured to be hot. LLVM already inlines within a
+  crate; the attribute mainly enables inlining *across* crates, which
+  `lto = "fat"` in the release profile largely does anyway. Applying it
+  untested contradicts "optimize only with measurements".
+- `#[must_use]` — only where discarding the result is a likely bug: pure
+  transforms a caller might mistake for in-place mutation (`SimBox::wrap`,
+  `minimum_image`), and constructors. Not on plain getters; std marks those
+  because it is a stability-guaranteed public API, which this is not.
+
+`missing_docs` is on, so every public item needs a doc comment. One line is a
+complete answer for an obvious getter.
+
 ## Where the context lives
 
 Read these when relevant — do not assume their contents:
