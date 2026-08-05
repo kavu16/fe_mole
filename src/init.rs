@@ -126,22 +126,75 @@ pub fn maxwell_boltzmann_velocities(system: &mut System, temperature: f64, rng: 
         system.len()
     );
 
-    // Scoped so the mutable borrow ends before the calls below, each of which
-    // needs its own borrow of `system`.
-    {
-        let (masses, SlicesMut3 { x, y, z }) = system.split_masses_velocities();
-        for (&m, vx, vy, vz) in izip!(masses, x, y, z) {
-            let sigma = (BOLTZMANN * temperature / (MASS_VELOCITY_SQ_TO_ENERGY * m)).sqrt();
-            let normal = Normal::new(0.0, sigma).expect("temperature and mass validated");
-            *vx = normal.sample(rng);
-            *vy = normal.sample(rng);
-            *vz = normal.sample(rng);
-        }
-    }
-
+    draw_maxwell_boltzmann(system, temperature, rng);
     remove_center_of_mass_momentum(system);
+    rescale_to_temperature(system, temperature);
+}
 
+/// Draws every velocity component from the Maxwell–Boltzmann distribution at
+/// `temperature` [K], with no corrections applied.
+///
+/// Each Cartesian component is an independent Gaussian with zero mean and
+/// variance `k_B T / m`, converted from kcal/(mol·amu) to Å²/fs² — see
+/// [`crate::units::MASS_VELOCITY_SQ_TO_ENERGY`].
+///
+/// The result carries a small net momentum, and its instantaneous temperature
+/// fluctuates about `temperature` by roughly `√(2/3N)`. Both are corrected by
+/// [`maxwell_boltzmann_velocities`], which is what callers normally want.
+///
+/// This exists as a separate function so the *absolute* velocity scale can be
+/// tested. [`rescale_to_temperature`] divides out any global error in the
+/// variance, so a wrong unit conversion here is invisible once the full
+/// initialiser has run.
+///
+/// # Panics
+///
+/// Panics if `temperature` is not finite and positive.
+pub fn draw_maxwell_boltzmann(system: &mut System, temperature: f64, rng: &mut impl Rng) {
+    assert!(
+        temperature.is_finite() && temperature > 0.0,
+        "temperature must be finite and positive, got {temperature}"
+    );
+
+    let (masses, SlicesMut3 { x, y, z }) = system.split_masses_velocities();
+    for (&m, vx, vy, vz) in izip!(masses, x, y, z) {
+        let sigma = (BOLTZMANN * temperature / (MASS_VELOCITY_SQ_TO_ENERGY * m)).sqrt();
+        let normal = Normal::new(0.0, sigma).expect("temperature and mass validated");
+        *vx = normal.sample(rng);
+        *vy = normal.sample(rng);
+        *vz = normal.sample(rng);
+    }
+}
+
+/// Scales every velocity uniformly so the instantaneous temperature equals
+/// `temperature` [K].
+///
+/// Temperature is quadratic in velocity, so the factor applied to velocities
+/// is `√(T_target / T_current)`, not the temperature ratio itself.
+///
+/// Uniform scaling leaves total momentum proportional to what it was, so
+/// applying this *after* [`remove_center_of_mass_momentum`] preserves the zero
+/// it established. The reverse order does not work: removing drift changes the
+/// kinetic energy, which would undo the rescale.
+///
+/// # Panics
+///
+/// Panics if `temperature` is not finite and positive, or if the system has
+/// fewer than two particles.
+pub fn rescale_to_temperature(system: &mut System, temperature: f64) {
+    assert!(
+        temperature.is_finite() && temperature > 0.0,
+        "temperature must be finite and positive, got {temperature}"
+    );
+    assert!(
+        system.len() >= 2,
+        "rescaling needs at least two particles, got {}",
+        system.len()
+    );
+
+    // Measured before the split: `temperature` needs a shared borrow.
     let rescale = (temperature / system_temperature(system)).sqrt();
+
     let (_, SlicesMut3 { x, y, z }) = system.split_masses_velocities();
     for (vx, vy, vz) in izip!(x, y, z) {
         *vx *= rescale;
@@ -346,6 +399,54 @@ mod tests {
         // ...and different seeds genuinely differ, so the above is not
         // passing because every velocity is zero.
         assert_ne!(a.velocities().x, thermalised(8).velocities().x);
+    }
+
+    #[test]
+    fn raw_draw_has_the_right_absolute_velocity_scale() {
+        // The check the composed initialiser structurally cannot make. A global
+        // error in sigma -- a wrong or missing unit conversion -- is divided
+        // straight back out by the rescale, so the only place it is observable
+        // is before rescaling.
+        let mut s = reference_lattice();
+        draw_maxwell_boltzmann(&mut s, ARGON_TEMPERATURE, &mut Pcg64Mcg::seed_from_u64(41));
+
+        // ⟨v_c²⟩ = k_B T / m in internal units, ≈ 1.965e-6 Å²/fs² for argon at
+        // 94.4 K. Sampling error is ~4.8% over 864 particles; a missing
+        // conversion would be wrong by a factor of 2390.
+        let expected = BOLTZMANN * ARGON_TEMPERATURE / (MASS_VELOCITY_SQ_TO_ENERGY * ARGON_MASS);
+        let v = s.velocities();
+        let n = s.len() as f64;
+        let mean_sq = |c: &[f64]| c.iter().map(|x| x * x).sum::<f64>() / n;
+        assert_relative_eq!(mean_sq(v.x), expected, max_relative = 0.15);
+        assert_relative_eq!(mean_sq(v.y), expected, max_relative = 0.15);
+        assert_relative_eq!(mean_sq(v.z), expected, max_relative = 0.15);
+    }
+
+    #[test]
+    fn raw_draw_is_already_near_the_target_temperature() {
+        // The rescale should be a small correction, not a repair. If it ever
+        // has real work to do, the draw is wrong.
+        let mut s = reference_lattice();
+        draw_maxwell_boltzmann(&mut s, ARGON_TEMPERATURE, &mut Pcg64Mcg::seed_from_u64(43));
+        // √(2/3N) ≈ 2.8% at N = 864; 12% is four standard deviations.
+        assert_relative_eq!(temperature(&s), ARGON_TEMPERATURE, max_relative = 0.12);
+    }
+
+    #[test]
+    fn rescaling_hits_the_target_without_reintroducing_drift() {
+        // Uniform scaling multiplies total momentum by a constant, so a zero
+        // stays a zero. This is what makes the rescale safe to apply last.
+        let mut s = reference_lattice();
+        draw_maxwell_boltzmann(&mut s, 50.0, &mut Pcg64Mcg::seed_from_u64(47));
+        remove_center_of_mass_momentum(&mut s);
+        rescale_to_temperature(&mut s, ARGON_TEMPERATURE);
+
+        assert_relative_eq!(temperature(&s), ARGON_TEMPERATURE, max_relative = 1e-12);
+        let p = total_momentum(&s);
+        assert!(
+            p.x.abs() < 1e-12 && p.y.abs() < 1e-12 && p.z.abs() < 1e-12,
+            "p = {p:?}"
+        );
     }
 
     #[test]
