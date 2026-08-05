@@ -365,3 +365,138 @@ mod tests {
         assert_relative_eq!(Vec3::ZERO.norm(), 0.0);
     }
 }
+
+/// M1 checkpoint 0: operator overloads for [`Vec3`].
+///
+/// These tests will not compile until `Add`, `Sub` and `Mul<f64>` are
+/// implemented for `Vec3`. A compile failure is the intended starting state —
+/// `cannot subtract `Vec3` from `Vec3`` means the red phase, not a mistake.
+///
+/// The properties asserted here are the ones the engine actually relies on,
+/// not an arbitrary algebra checklist. In particular
+/// `pair_displacement_matches_componentwise_form` is a differential test
+/// against the existing hand-written form, so the operators can be adopted in
+/// the M1 force loop without changing any number.
+#[cfg(test)]
+mod vec3_ops {
+    use crate::geometry::{SimBox, Vec3};
+    use approx::assert_relative_eq;
+    use rand::{Rng, SeedableRng};
+    use rand_pcg::Pcg64Mcg;
+
+    /// Componentwise comparison, for properties that do not hold exactly in
+    /// floating point.
+    fn assert_close(a: Vec3, b: Vec3) {
+        assert_relative_eq!(a.x, b.x, max_relative = 1e-12);
+        assert_relative_eq!(a.y, b.y, max_relative = 1e-12);
+        assert_relative_eq!(a.z, b.z, max_relative = 1e-12);
+    }
+
+    #[test]
+    fn operators_are_componentwise() {
+        let a = Vec3::new(1.0, 2.0, 3.0);
+        let b = Vec3::new(0.5, -1.0, 4.0);
+        assert_eq!(a + b, Vec3::new(1.5, 1.0, 7.0));
+        assert_eq!(a - b, Vec3::new(0.5, 3.0, -1.0));
+        assert_eq!(a * 2.0, Vec3::new(2.0, 4.0, 6.0));
+    }
+
+    #[test]
+    fn zero_is_the_additive_identity() {
+        let a = Vec3::new(1.5, -2.5, 3.5);
+        assert_eq!(a + Vec3::ZERO, a);
+        assert_eq!(a - Vec3::ZERO, a);
+        assert_eq!(a * 1.0, a);
+        assert_eq!(a * 0.0, Vec3::ZERO);
+        assert_eq!(a - a, Vec3::ZERO);
+    }
+
+    #[test]
+    fn addition_commutes() {
+        // Exact in IEEE 754: addition commutes even though it does not
+        // associate.
+        let a = Vec3::new(0.1, 0.2, 0.3);
+        let b = Vec3::new(0.7, -0.4, 1e17);
+        assert_eq!(a + b, b + a);
+    }
+
+    #[test]
+    fn addition_associates_and_scaling_distributes() {
+        let a = Vec3::new(1.0, 2.0, 3.0);
+        let b = Vec3::new(-4.0, 5.0, -6.0);
+        let c = Vec3::new(0.25, 0.5, 0.75);
+        assert_close((a + b) + c, a + (b + c));
+        assert_close((a + b) * 3.0, a * 3.0 + b * 3.0);
+    }
+
+    #[test]
+    fn scaling_scales_the_norm() {
+        let a = Vec3::new(3.0, 4.0, 12.0);
+        for s in [0.0f64, 0.5, 1.0, -2.0, 1e6] {
+            assert_relative_eq!((a * s).norm(), s.abs() * a.norm(), max_relative = 1e-12);
+        }
+    }
+
+    #[test]
+    fn displacement_is_antisymmetric() {
+        // r_ij = -r_ji. Newton's third law depends on this holding exactly:
+        // the M1 pair loop computes one displacement and applies +f to one
+        // particle and -f to the other.
+        let mut rng = Pcg64Mcg::seed_from_u64(0x5EED_0002);
+        for _ in 0..10_000 {
+            let a = Vec3::new(
+                rng.random_range(-100.0..100.0),
+                rng.random_range(-100.0..100.0),
+                rng.random_range(-100.0..100.0),
+            );
+            let b = Vec3::new(
+                rng.random_range(-100.0..100.0),
+                rng.random_range(-100.0..100.0),
+                rng.random_range(-100.0..100.0),
+            );
+            assert_eq!(b - a, (a - b) * -1.0);
+        }
+    }
+
+    #[test]
+    fn triangle_inequality() {
+        let mut rng = Pcg64Mcg::seed_from_u64(0x5EED_0003);
+        for _ in 0..10_000 {
+            let a = Vec3::new(
+                rng.random_range(-10.0..10.0),
+                rng.random_range(-10.0..10.0),
+                rng.random_range(-10.0..10.0),
+            );
+            let b = Vec3::new(
+                rng.random_range(-10.0..10.0),
+                rng.random_range(-10.0..10.0),
+                rng.random_range(-10.0..10.0),
+            );
+            assert!((a + b).norm() <= a.norm() + b.norm() + 1e-12);
+        }
+    }
+
+    #[test]
+    fn pair_displacement_matches_componentwise_form() {
+        // The differential test that makes adopting these operators safe: the
+        // minimum-image pair displacement computed with `-` must equal the
+        // hand-written componentwise form used everywhere today, bit for bit.
+        let sim_box = SimBox::new(10.0, 13.5, 7.25);
+        let mut rng = Pcg64Mcg::seed_from_u64(0x5EED_0004);
+        for _ in 0..10_000 {
+            let a = Vec3::new(
+                rng.random_range(-50.0..50.0),
+                rng.random_range(-50.0..50.0),
+                rng.random_range(-50.0..50.0),
+            );
+            let b = Vec3::new(
+                rng.random_range(-50.0..50.0),
+                rng.random_range(-50.0..50.0),
+                rng.random_range(-50.0..50.0),
+            );
+            let with_operator = sim_box.minimum_image(b - a);
+            let componentwise = sim_box.minimum_image(Vec3::new(b.x - a.x, b.y - a.y, b.z - a.z));
+            assert_eq!(with_operator, componentwise);
+        }
+    }
+}

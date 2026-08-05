@@ -41,6 +41,18 @@ SI to `< 1e-12` relative; `BOLTZMANN` to `8e-8`.
 
 Lennard-Jones only, velocity Verlet, periodic boundaries, O(N²) forces.
 
+Worked in checkpoints, each ending at something runnable. The integrator and
+the force calculation are never changed together — that keeps a drift
+regression bisectable.
+
+| # | Checkpoint | Done when |
+|---|---|---|
+| 0 | `Vec3` operator overloads (`Add`, `Sub`, `Mul<f64>`) | `mod vec3_ops` tests pass |
+| 1 | fcc lattice initialisation + Maxwell–Boltzmann velocities | Measured T matches the target; net momentum zero |
+| 2 | LJ potential and force, consistently cut off | Force matches `-dV/dr` by finite difference to `< 1e-6` |
+| 3 | O(N²) pair loop over the shared minimum-image helper | Net force sums to zero; Newton's third law holds pairwise |
+| 4 | Velocity Verlet + energy logging | Acceptance criteria below |
+
 - [ ] Velocity Verlet implemented
 - [ ] LJ potential and force, consistently cut off (shifted or switched)
 - [ ] Minimum image convention, single shared helper
