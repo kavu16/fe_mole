@@ -146,3 +146,61 @@ was the weaker argument; an engine you cannot verify teaches you nothing.
 **Next:** M1. No infrastructure work outstanding.
 
 ---
+
+## 2026-08-05 — M1 checkpoint 1: four bugs, and what each one looked like
+
+**Context:** M1 checkpoint 1 — fcc lattice, Maxwell–Boltzmann velocities,
+and the kinetic energy / temperature / momentum observables. Recording the
+four things I got wrong, because the *symptoms* are the reusable part.
+
+**What I did / Result:**
+
+1. **fcc corner site used the bare cell index, not index × cell edge.**
+   Symptom: particle count, density, and every-site-inside-the-box all passed;
+   nearest-neighbour distance came out 0.155 Å against an expected 4.087 Å, and
+   coordination numbers were 125–195 instead of 12. The lesson is in the
+   *pattern* of failure: a uniformly wrong lattice would have been wrong by a
+   clean factor. Getting the count right while the spacing is garbage means
+   some sites are placed correctly and others are not — 0.155 Å was just the
+   nearest accidental approach between the correct group and the crammed one.
+
+2. **`sigma` missing the amu·Å²/fs² → kcal/mol conversion.** Caught by code
+   review, not by a test, and that is the interesting part. The rescale-to-
+   target-temperature step divides out any *global* error in the drawn
+   variance, so the final velocities were going to be exactly right regardless.
+   The bug was latent: correct output, incoherent code, and it would have
+   detonated the first time anyone made the rescale optional.
+
+3. **`remove_center_of_mass_momentum` subtracted `m·vᵢ` per particle** instead
+   of the global `v_com = P/M`. A units check catches it immediately —
+   amu·Å/fs cannot be subtracted from Å/fs. The awkward `*vx -= m * *vx`
+   double-deref that prompted me to ask about syntax was a symptom of the wrong
+   expression, not a Rust problem; the correct version has no `*vx` on the
+   right-hand side at all.
+
+4. **Rescale factor used `T_target/T_current` instead of its square root.**
+   Symptom: temperature 0.81% low, kinetic energy 2.2% high. I asked whether
+   this was floating point. It was not, and the magnitude is how you tell —
+   double-precision round-off is ~1e-16 relative, so anything above ~1e-12 on a
+   sum of a few thousand terms is structural. The residual was small only
+   because the draw already put `T_current` near the target, making
+   `rescale ≈ 1`, where a wrong function of a number near 1 is also near 1.
+
+**Interpretation:** Three of the four were caught by tests; the one that was
+not (#2) was the one a downstream normalisation would have masked forever.
+That is the generalisable lesson from this checkpoint: **a normalisation step
+downstream of a calculation hides errors in that calculation.** The fix was to
+split `draw_maxwell_boltzmann` and `rescale_to_temperature` into separate
+public functions so the raw draw's absolute scale is directly assertable
+before anything normalises it.
+
+Unit errors in this system are never subtle — a missing conversion is a factor
+of 2390, not a few percent. So "off by 2%" positively rules out a units bug,
+which is a useful thing to know while triaging.
+
+**Next:** Checkpoint 2 — Lennard-Jones potential and force. The same masking
+risk shows up again at M4: PME's reciprocal-space scale is partly fixed by the
+self-energy correction, so a wrong prefactor can look right in the total energy
+while the forces are wrong. Test the piece before the thing that normalises it.
+
+---

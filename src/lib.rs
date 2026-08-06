@@ -14,6 +14,7 @@
 //! per component per quantity, not a `Vec<Particle>`. This is deliberate, for
 //! SIMD and cache behaviour — see `docs/decisions/0001-particle-storage-layout.md`.
 
+pub mod forces;
 pub mod geometry;
 pub mod init;
 pub mod observables;
