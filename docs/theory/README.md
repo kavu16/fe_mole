@@ -43,7 +43,8 @@ identifier uses the ASCII form in the third column.
 | `dt` | integration timestep | `dt` | fs |
 | `T` | temperature | `temperature` | K |
 | `k_B` | Boltzmann constant | `units::BOLTZMANN` | kcal/(mol·K) |
-| `E` | total energy | `energy_total` | kcal/mol |
+| `U` | potential energy (one pair, or summed) | `energy` | kcal/mol |
+| `E` | total energy, `KE + U` | `energy_total` | kcal/mol |
 
 Two conventions are worth stating because they are easy to get backwards:
 

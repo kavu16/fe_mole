@@ -40,7 +40,7 @@ Prefer, in rough order of value:
 
 - comparison against an analytical result (Madelung constant, virial theorem),
 - a conservation law (energy, momentum, time-reversibility),
-- a numerical derivative: any force must match `-(V(r+h) − V(r−h)) / 2h`,
+- a numerical derivative: any force must match `-(U(r+h) − U(r−h)) / 2h`,
 - comparison against a slower, obviously-correct implementation,
 - a symmetry or limiting case (`r → ∞`, `N = 2`, zero temperature).
 

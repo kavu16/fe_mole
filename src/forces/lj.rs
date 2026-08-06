@@ -9,12 +9,12 @@ use crate::units::BOLTZMANN;
 /// A Lennard-Jones interaction with a cutoff, for one pair of species.
 ///
 /// Energies are kcal/mol, lengths Å. `energy_shift` is precomputed at
-/// construction so the hot path never re-evaluates `V` at the cutoff.
+/// construction so the hot path never re-evaluates `U` at the cutoff.
 ///
 /// # Cutoff
 ///
-/// The potential is **energy-shifted**: `V(r) − V(r_c)` inside the cutoff,
-/// zero outside. An unshifted truncation leaves `V` discontinuous at `r_c`,
+/// The potential is **energy-shifted**: `U(r) − U(r_c)` inside the cutoff,
+/// zero outside. An unshifted truncation leaves `U` discontinuous at `r_c`,
 /// and every pair crossing the boundary injects energy — which shows up in an
 /// NVE run as monotonic heating rather than as random drift. Working out what
 /// the shift does to the force is the point of `docs/theory/lennard-jones.md`.
@@ -86,7 +86,7 @@ impl LennardJones {
         todo!("M1 checkpoint 2")
     }
 
-    /// `−V'(r) / r` at squared separation `r_squared` [Å²], in kcal/mol/Å².
+    /// `−U'(r) / r` at squared separation `r_squared` [Å²], in kcal/mol/Å².
     ///
     /// This is the quantity a pair loop actually wants: multiplying it by the
     /// displacement vector `r_ij` [Å] gives the force vector [kcal/mol/Å]
@@ -119,7 +119,7 @@ mod tests {
         lj.energy(r * r)
     }
 
-    /// Analytic force magnitude `−V'(r)`, reconstructed from `force_over_r`.
+    /// Analytic force magnitude `−U'(r)`, reconstructed from `force_over_r`.
     fn f(lj: &LennardJones, r: f64) -> f64 {
         lj.force_over_r(r * r) * r
     }
@@ -137,7 +137,7 @@ mod tests {
     #[test]
     fn force_matches_the_numerical_derivative_of_the_energy() {
         // THE test for this checkpoint, and the M1 acceptance criterion for
-        // the pair interaction: any force must match -(V(r+h) - V(r-h)) / 2h.
+        // the pair interaction: any force must match -(U(r+h) - U(r-h)) / 2h.
         // It catches sign errors, dropped chain-rule factors, and an energy and
         // a force that disagree about the cutoff — independently of whether the
         // potential itself is the one we intended.
@@ -157,7 +157,7 @@ mod tests {
 
     #[test]
     fn the_minimum_sits_at_the_expected_depth_and_separation() {
-        // V is minimised at r = 2^(1/6) σ, where it equals -ε (before the
+        // U is minimised at r = 2^(1/6) σ, where it equals -ε (before the
         // shift) and the force vanishes. Three independent facts from one
         // point, and none of them depend on the cutoff treatment except
         // through the shift.
@@ -177,7 +177,7 @@ mod tests {
 
     #[test]
     fn the_unshifted_potential_crosses_zero_at_sigma() {
-        // V(σ) = 0 by construction, so after shifting it is exactly -V(r_c).
+        // U(σ) = 0 by construction, so after shifting it is exactly -U(r_c).
         let lj = argon();
         assert_relative_eq!(v(&lj, SIGMA), -lj.energy_shift(), max_relative = 1e-12);
     }

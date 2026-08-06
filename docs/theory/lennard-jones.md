@@ -16,11 +16,11 @@ which one this code uses, since mixing them up is a factor of `2^(1/6)`.
 
 ## The force
 
-Derive `f(r) = −dV/dr`. Keep the algebra, not just the result — the exponents
+Derive `f(r) = −dU/dr`. Keep the algebra, not just the result — the exponents
 are where sign and factor errors live.
 
 Then note what the code actually computes and why: the pair loop wants
-`−V'(r)/r` so it can multiply by the displacement vector directly, avoiding a
+`−U'(r)/r` so it can multiply by the displacement vector directly, avoiding a
 square root per pair. Record what that costs in clarity and what it buys.
 
 ## Landmarks
@@ -28,8 +28,8 @@ square root per pair. Record what that costs in clarity and what it buys.
 Three values worth deriving, because they are the cheapest possible checks on
 an implementation:
 
-- where `V(r) = 0`
-- where `V(r)` is minimised, and its value there
+- where `U(r) = 0`
+- where `U(r)` is minimised, and its value there
 - where `f(r)` is maximally attractive
 
 ## Cutoff treatment
@@ -37,10 +37,10 @@ an implementation:
 Why a cutoff is needed at all (cost, and the minimum image constraint
 `r_c ≤ L/2`).
 
-Then the central point: an unmodified cutoff leaves `V` discontinuous at
+Then the central point: an unmodified cutoff leaves `U` discontinuous at
 `r_c`, and every pair crossing it injects energy — this shows up as monotonic
 heating in an NVE run, not as random drift. Explain the shifted form
-`V_shift(r) = V(r) − V(r_c)`, and answer:
+`U_shift(r) = U(r) − U(r_c)`, and answer:
 
 - What does shifting do to the force? (Work out `d/dr` of a constant. This is
   the point of the whole exercise.)
