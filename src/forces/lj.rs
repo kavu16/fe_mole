@@ -4,6 +4,8 @@
 //! interaction only — one pair, one separation. The O(N²) loop over pairs is
 //! checkpoint 3.
 
+use crate::geometry::SimBox;
+use crate::system::{Slices3, SlicesMut3, System};
 use crate::units::BOLTZMANN;
 
 /// A Lennard-Jones interaction with a cutoff, for one pair of species.
@@ -126,6 +128,49 @@ impl LennardJones {
         let s6 = sigma_over_r_pow6(self.sigma(), r_squared);
         (48.0 / r_squared) * self.epsilon() * (s6 * s6 - s6 / 2.0)
     }
+}
+
+/// Adds Lennard-Jones forces from every pair into `forces`, and returns the
+/// total LJ potential energy [kcal/mol].
+///
+/// **Accumulates.** Forces are added to whatever is already there, so a caller
+/// combining several interactions zeroes once (see [`System::zero_forces`])
+/// and then calls each kernel in turn.
+///
+/// O(N²): every pair is visited. M2 replaces this with neighbour lists, and
+/// this path becomes the reference the fast path is validated against — so it
+/// stays, and it stays obvious rather than clever.
+///
+/// Every pair displacement goes through [`SimBox::minimum_image`].
+///
+/// # Panics
+///
+/// Panics if `positions` and `forces` disagree in length, or if the cutoff
+/// exceeds half the shortest box length. The minimum image convention is only
+/// valid for `r_c ≤ L/2`; beyond it a particle can interact with two images of
+/// the same neighbour, or with itself, and the energy silently stops being the
+/// one the model defines. The cutoff is a compile-time constant here, so this
+/// is a contract violation rather than a runtime condition — see `CLAUDE.md`
+/// on error handling.
+#[expect(unused_variables, reason = "stub: body is checkpoint 3 work")]
+pub fn accumulate_forces(
+    lj: &LennardJones,
+    sim_box: &SimBox,
+    positions: Slices3<'_>,
+    forces: SlicesMut3<'_>,
+) -> f64 {
+    todo!("M1 checkpoint 3")
+}
+
+/// Zeroes the force arrays, evaluates the Lennard-Jones interaction over all
+/// pairs, and returns the total potential energy [kcal/mol].
+///
+/// The convenience wrapper the integrator will call each step.
+pub fn compute_forces(system: &mut System, lj: &LennardJones) -> f64 {
+    system.zero_forces();
+    let sim_box = *system.sim_box();
+    let (positions, forces) = system.split_for_forces();
+    accumulate_forces(lj, &sim_box, positions, forces)
 }
 
 #[cfg(test)]
@@ -291,5 +336,268 @@ mod tests {
     #[should_panic(expected = "r_cut")]
     fn a_cutoff_inside_the_core_is_rejected() {
         let _ = LennardJones::new(3.4, 0.2, 2.0);
+    }
+
+    // ---- checkpoint 3: the O(N²) pair loop ----
+
+    use crate::geometry::Vec3;
+    use crate::init::fcc_lattice;
+    use rand::{RngExt, SeedableRng};
+    use rand_pcg::Pcg64Mcg;
+
+    const ARGON_MASS: f64 = 39.948;
+    const ARGON_DENSITY: f64 = 1.374;
+
+    /// An fcc lattice with every site nudged off its symmetry point, so forces
+    /// are non-trivial but no pair is anywhere near overlapping.
+    fn perturbed_lattice(cells: usize, jitter: f64, seed: u64) -> System {
+        let n = 4 * cells * cells * cells;
+        let sim_box = SimBox::from_density(n, ARGON_MASS, ARGON_DENSITY);
+        let base = fcc_lattice(cells, sim_box, ARGON_MASS);
+        let mut rng = Pcg64Mcg::seed_from_u64(seed);
+        let mut s = System::with_capacity(n, sim_box);
+        let r = base.positions();
+        for i in 0..base.len() {
+            let d = Vec3::new(
+                rng.random_range(-jitter..jitter),
+                rng.random_range(-jitter..jitter),
+                rng.random_range(-jitter..jitter),
+            );
+            s.push(
+                Vec3::new(r.x[i], r.y[i], r.z[i]) + d,
+                Vec3::ZERO,
+                ARGON_MASS,
+                0.0,
+                0,
+            );
+        }
+        s
+    }
+
+    fn two_particles(sim_box: SimBox, a: Vec3, b: Vec3) -> System {
+        let mut s = System::with_capacity(2, sim_box);
+        s.push(a, Vec3::ZERO, ARGON_MASS, 0.0, 0);
+        s.push(b, Vec3::ZERO, ARGON_MASS, 0.0, 0);
+        s
+    }
+
+    /// Total energy by an independent double loop, with no force bookkeeping.
+    /// The slower, obviously-correct implementation the kernel is checked
+    /// against.
+    fn reference_energy(lj: &LennardJones, system: &System) -> f64 {
+        let r = system.positions();
+        let sim_box = *system.sim_box();
+        let mut total = 0.0;
+        for i in 0..system.len() {
+            for j in (i + 1)..system.len() {
+                let a = Vec3::new(r.x[i], r.y[i], r.z[i]);
+                let b = Vec3::new(r.x[j], r.y[j], r.z[j]);
+                total += lj.energy(sim_box.minimum_image(b - a).norm_squared());
+            }
+        }
+        total
+    }
+
+    fn net_force(system: &System) -> Vec3 {
+        let f = system.forces();
+        Vec3::new(f.x.iter().sum(), f.y.iter().sum(), f.z.iter().sum())
+    }
+
+    #[test]
+    fn net_force_vanishes() {
+        // Newton's third law, summed: every pair contributes +f and -f, so the
+        // total must cancel to round-off. This is the checkpoint criterion, and
+        // at M1 it is what makes momentum conserved over 10^5 steps.
+        let lj = argon();
+        let mut s = perturbed_lattice(3, 0.3, 1);
+        compute_forces(&mut s, &lj);
+
+        let p = net_force(&s);
+        assert!(p.x.abs() < 1e-11, "net fx = {}", p.x);
+        assert!(p.y.abs() < 1e-11, "net fy = {}", p.y);
+        assert!(p.z.abs() < 1e-11, "net fz = {}", p.z);
+    }
+
+    #[test]
+    fn a_perfect_fcc_lattice_has_zero_force_on_every_particle() {
+        // fcc is a Bravais lattice, so every site is a centre of inversion:
+        // for each neighbour at +d there is one at -d, and central forces
+        // cancel exactly. True for any isotropic pair potential and any
+        // isotropic cutoff, so this is an analytic check with no reference
+        // value needed.
+        let lj = argon();
+        let mut s = perturbed_lattice(3, 0.0, 2);
+        compute_forces(&mut s, &lj);
+
+        let f = s.forces();
+        for i in 0..s.len() {
+            let mag = Vec3::new(f.x[i], f.y[i], f.z[i]).norm();
+            assert!(mag < 1e-12, "particle {i} feels {mag} kcal/mol/Å");
+        }
+    }
+
+    #[test]
+    fn a_single_pair_obeys_newtons_third_law() {
+        let lj = argon();
+        let sim_box = SimBox::cubic(40.0);
+        let sep = 4.0;
+        let mut s = two_particles(
+            sim_box,
+            Vec3::new(10.0, 10.0, 10.0),
+            Vec3::new(10.0 + sep, 10.0, 10.0),
+        );
+        let energy = compute_forces(&mut s, &lj);
+
+        let f = s.forces();
+        // Equal and opposite, along the separation, and matching the scalar
+        // pair function exactly.
+        let expected = lj.force_over_r(sep * sep) * sep;
+        assert_relative_eq!(f.x[0], -expected, max_relative = 1e-12);
+        assert_relative_eq!(f.x[1], expected, max_relative = 1e-12);
+        assert_relative_eq!(f.y[0], 0.0, epsilon = 1e-15);
+        assert_relative_eq!(f.z[0], 0.0, epsilon = 1e-15);
+        assert_relative_eq!(energy, lj.energy(sep * sep), max_relative = 1e-12);
+    }
+
+    #[test]
+    fn energy_matches_an_independent_pair_sum() {
+        let lj = argon();
+        let mut s = perturbed_lattice(3, 0.3, 3);
+        let from_kernel = compute_forces(&mut s, &lj);
+        assert_relative_eq!(from_kernel, reference_energy(&lj, &s), max_relative = 1e-12);
+    }
+
+    #[test]
+    fn forces_match_the_numerical_gradient_of_the_total_energy() {
+        // The many-body version of checkpoint 2's check, and the strongest test
+        // here: it validates the loop structure, the minimum image, the cutoff
+        // and the third-law bookkeeping at once, against an energy computed by
+        // a completely separate routine.
+        let lj = argon();
+        let mut s = perturbed_lattice(2, 0.3, 4);
+        compute_forces(&mut s, &lj);
+        let analytic: Vec<Vec3> = (0..s.len())
+            .map(|i| {
+                let f = s.forces();
+                Vec3::new(f.x[i], f.y[i], f.z[i])
+            })
+            .collect();
+
+        let h = 1e-6;
+        for i in (0..s.len()).step_by(7) {
+            for axis in 0..3 {
+                let shift = |s: &mut System, d: f64| {
+                    let p = s.positions_mut();
+                    match axis {
+                        0 => p.x[i] += d,
+                        1 => p.y[i] += d,
+                        _ => p.z[i] += d,
+                    }
+                };
+                shift(&mut s, h);
+                let plus = reference_energy(&lj, &s);
+                shift(&mut s, -2.0 * h);
+                let minus = reference_energy(&lj, &s);
+                shift(&mut s, h);
+
+                let numerical = -(plus - minus) / (2.0 * h);
+                let a = match axis {
+                    0 => analytic[i].x,
+                    1 => analytic[i].y,
+                    _ => analytic[i].z,
+                };
+                assert_relative_eq!(a, numerical, max_relative = 1e-5, epsilon = 1e-7);
+            }
+        }
+    }
+
+    #[test]
+    fn the_minimum_image_is_applied() {
+        // Two particles either side of a face are 2 Å apart through the
+        // boundary and 18 Å apart the other way. Without minimum image they
+        // would be outside the cutoff and feel nothing.
+        let lj = argon();
+        let sim_box = SimBox::cubic(20.0);
+        let mut s = two_particles(sim_box, Vec3::new(1.0, 5.0, 5.0), Vec3::new(19.0, 5.0, 5.0));
+        let energy = compute_forces(&mut s, &lj);
+
+        assert_relative_eq!(energy, lj.energy(4.0), max_relative = 1e-12);
+        assert!(
+            s.forces().x[0].abs() > 0.0,
+            "no interaction across the boundary"
+        );
+        assert_relative_eq!(s.forces().x[0], -s.forces().x[1], max_relative = 1e-12);
+    }
+
+    #[test]
+    fn pairs_beyond_the_cutoff_contribute_nothing() {
+        let lj = argon();
+        let sim_box = SimBox::cubic(60.0);
+        let mut s = two_particles(
+            sim_box,
+            Vec3::new(5.0, 5.0, 5.0),
+            Vec3::new(5.0 + lj.r_cut() + 1.0, 5.0, 5.0),
+        );
+        let energy = compute_forces(&mut s, &lj);
+        assert_eq!(energy, 0.0);
+        assert_eq!(s.forces().x, [0.0, 0.0]);
+    }
+
+    #[test]
+    fn translating_the_system_leaves_forces_and_energy_unchanged() {
+        // Only displacements enter the physics, so a rigid shift -- including
+        // one that pushes particles outside the primary cell -- must change
+        // nothing.
+        let lj = argon();
+        let mut a = perturbed_lattice(3, 0.3, 5);
+        let energy_a = compute_forces(&mut a, &lj);
+
+        let mut b = perturbed_lattice(3, 0.3, 5);
+        {
+            let p = b.positions_mut();
+            for k in 0..p.x.len() {
+                p.x[k] += 137.0;
+                p.y[k] -= 42.5;
+                p.z[k] += 8.25;
+            }
+        }
+        let energy_b = compute_forces(&mut b, &lj);
+
+        assert_relative_eq!(energy_a, energy_b, max_relative = 1e-10);
+        for i in 0..a.len() {
+            assert_relative_eq!(a.forces().x[i], b.forces().x[i], epsilon = 1e-10);
+        }
+    }
+
+    #[test]
+    fn accumulate_adds_rather_than_overwrites() {
+        // The contract that lets several interactions share one force array.
+        let lj = argon();
+        let mut s = perturbed_lattice(2, 0.3, 6);
+        let once = compute_forces(&mut s, &lj);
+        let first: Vec<f64> = s.forces().x.to_vec();
+
+        let sim_box = *s.sim_box();
+        let (positions, forces) = s.split_for_forces();
+        let again = accumulate_forces(&lj, &sim_box, positions, forces);
+
+        assert_relative_eq!(once, again, max_relative = 1e-12);
+        let doubled: Vec<f64> = s.forces().x.to_vec();
+        for (&twice, &once) in doubled.iter().zip(&first) {
+            assert_relative_eq!(twice, 2.0 * once, max_relative = 1e-12);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "minimum image")]
+    fn a_cutoff_wider_than_half_the_box_is_rejected() {
+        // r_c = 8.5 Å needs L ≥ 17 Å.
+        let lj = argon();
+        let mut s = two_particles(
+            SimBox::cubic(16.0),
+            Vec3::new(1.0, 1.0, 1.0),
+            Vec3::new(5.0, 1.0, 1.0),
+        );
+        let _ = compute_forces(&mut s, &lj);
     }
 }

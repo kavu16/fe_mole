@@ -142,6 +142,16 @@ impl System {
         }
     }
 
+    /// Unwrapped positions, mutable. Do not wrap in place — see the type-level
+    /// note.
+    pub fn positions_mut(&mut self) -> SlicesMut3<'_> {
+        SlicesMut3 {
+            x: &mut self.rx,
+            y: &mut self.ry,
+            z: &mut self.rz,
+        }
+    }
+
     /// Velocities, Å/fs.
     pub fn velocities(&self) -> Slices3<'_> {
         Slices3 {
