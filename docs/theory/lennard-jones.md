@@ -14,10 +14,15 @@ reason worth writing down.)
 Note the two equivalent parameterisations (`σ`/`ε` versus `r_min`/`ε`) and
 which one this code uses, since mixing them up is a factor of `2^(1/6)`.
 
+the 12-6 form is `U(r) = 4 ε [ (σ/r)^12 - (σ/r)^6 ]`
+with the 12 term being the Pauli repulsion and the 6 term being the induced-dipole attraction.
+
 ## The force
 
 Derive `f(r) = −dU/dr`. Keep the algebra, not just the result — the exponents
 are where sign and factor errors live.
+
+`f(r) = -dU/dr = 24 ε [ 2 (σ^12)/(r^13) - (σ^6)/(r^7) ]`
 
 Then note what the code actually computes and why: the pair loop wants
 `−U'(r)/r` so it can multiply by the displacement vector directly, avoiding a
@@ -29,8 +34,11 @@ Three values worth deriving, because they are the cheapest possible checks on
 an implementation:
 
 - where `U(r) = 0`
+  - `r = σ`
 - where `U(r)` is minimised, and its value there
+  - `r = 2^(1/6) σ`, `U(r) = -ε`
 - where `f(r)` is maximally attractive
+  - `r = (26/7)^(1/6) σ`
 
 ## Cutoff treatment
 

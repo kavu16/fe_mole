@@ -26,6 +26,19 @@ pub struct LennardJones {
     energy_shift: f64,
 }
 
+/// `(σ/r)⁶`. Every LJ exponent is even, so `r` itself is never needed.
+fn sigma_over_r_pow6(sigma: f64, r_squared: f64) -> f64 {
+    let s2 = sigma * sigma / r_squared;
+    s2 * s2 * s2
+}
+
+/// Unshifted 12-6 potential, kcal/mol. `new` needs it at the cutoff, where
+/// [`LennardJones::energy`] would be circular.
+fn bare_lj_potential(sigma: f64, epsilon: f64, r_squared: f64) -> f64 {
+    let s6 = sigma_over_r_pow6(sigma, r_squared);
+    4.0 * epsilon * (s6 * s6 - s6)
+}
+
 impl LennardJones {
     /// Constructs an interaction with length parameter `sigma` [Å], well depth
     /// `epsilon` [kcal/mol], and cutoff `r_cut` [Å].
@@ -40,10 +53,18 @@ impl LennardJones {
     /// The other constraint on `r_cut`, that it must not exceed half the
     /// shortest box length, cannot be checked here because this type does not
     /// know the box. It belongs with the pair loop at checkpoint 3.
-    #[expect(unused_variables, reason = "stub: body is checkpoint 2 work")]
     #[must_use]
     pub fn new(sigma: f64, epsilon: f64, r_cut: f64) -> Self {
-        todo!("M1 checkpoint 2")
+        assert!(sigma.is_finite() && sigma > 0.0, "positive");
+        assert!(epsilon.is_finite() && epsilon > 0.0, "positive");
+        assert!(r_cut.is_finite() && r_cut > 0.0, "positive");
+        assert!(r_cut > sigma, "r_cut > sigma");
+        Self {
+            sigma,
+            epsilon,
+            r_cut,
+            energy_shift: bare_lj_potential(sigma, epsilon, r_cut * r_cut),
+        }
     }
 
     /// Argon, as used throughout the milestone list: `σ = 3.4 Å`,
@@ -80,10 +101,12 @@ impl LennardJones {
     /// cutoff comparison works just as well squared.
     ///
     /// Returns exactly zero at and beyond the cutoff.
-    #[expect(unused_variables, reason = "stub: body is checkpoint 2 work")]
     #[must_use]
     pub fn energy(&self, r_squared: f64) -> f64 {
-        todo!("M1 checkpoint 2")
+        if r_squared >= self.r_cut() * self.r_cut() {
+            return 0.0;
+        }
+        bare_lj_potential(self.sigma(), self.epsilon(), r_squared) - self.energy_shift()
     }
 
     /// `−U'(r) / r` at squared separation `r_squared` [Å²], in kcal/mol/Å².
@@ -94,10 +117,14 @@ impl LennardJones {
     ///
     /// Positive means repulsive — the force on `j` points away from `i`.
     /// Returns exactly zero at and beyond the cutoff.
-    #[expect(unused_variables, reason = "stub: body is checkpoint 2 work")]
     #[must_use]
     pub fn force_over_r(&self, r_squared: f64) -> f64 {
-        todo!("M1 checkpoint 2")
+        if r_squared >= self.r_cut() * self.r_cut() {
+            return 0.0;
+        }
+
+        let s6 = sigma_over_r_pow6(self.sigma(), r_squared);
+        (48.0 / r_squared) * self.epsilon() * (s6 * s6 - s6 / 2.0)
     }
 }
 
@@ -221,8 +248,13 @@ mod tests {
         // Halving the separation deep inside the core multiplies the energy by
         // 2^12 = 4096, since the r^-12 term dominates. Checks the exponent
         // without restating the formula.
+        //
+        // The exact ratio is 4096·(x⁶ − 1)/(x⁶ − 64) for x = σ/r, so "deep"
+        // means x⁶ ≫ 64. At 0.35σ the correction is still 13%; at 0.12σ it is
+        // 1.9e-4. Physically absurd separations, but this tests a functional
+        // form, not a configuration.
         let lj = LennardJones::new(SIGMA, 120.0 * BOLTZMANN, 100.0);
-        let r = 0.35 * SIGMA;
+        let r = 0.12 * SIGMA;
         let ratio = (v(&lj, r) + lj.energy_shift()) / (v(&lj, 2.0 * r) + lj.energy_shift());
         assert_relative_eq!(ratio, 4096.0, max_relative = 1e-3);
     }
